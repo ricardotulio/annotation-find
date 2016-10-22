@@ -47,7 +47,7 @@ class AnnotatedClassFinderTest extends \PHPUnit_Framework_TestCase
         };
                 
         $dispatcher = $this->getMockBuilder("Symfony\Component\EventDispatcher\EventDispatcher")->getMock();
-        $dispatcher->expects($this->exactly(2))
+        $dispatcher->expects($this->exactly(1))
             ->method("addListener")
             ->with("finds_{$this->annotation}", $callback);
         

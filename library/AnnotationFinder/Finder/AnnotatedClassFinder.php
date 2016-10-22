@@ -6,6 +6,9 @@ use Doctrine\Common\Annotations\AnnotationReader;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 use AnnotationFinder\Event\AnnotatedClassFoundEvent;
 
+/**
+ * @author ricardo
+ */
 final class AnnotatedClassFinder implements Finder
 {
 
@@ -22,12 +25,59 @@ final class AnnotatedClassFinder implements Finder
         $this->dispatcher = $dispatcher;
     }
 
+    private function hasClass($file) : bool {
+        $tokens = token_get_all(file_get_contents($file));
+                
+        foreach($tokens as $token) {
+            if(is_array($token) && in_array("class", $token)) {
+                return true;         
+            }
+        }
+        
+        return false;
+    }
+    
+    private function getDeclaredClasses($file) : array {
+        $tokens = token_get_all(file_get_contents($file));
+        $namespace = "";
+        $class = "";
+        $classes = array();
+        
+        foreach($tokens as $key => $value) {
+            if(is_array($value)) {
+                if(in_array(T_NAMESPACE, $value)) {
+                    $namespace = $tokens[$key + 2][1];
+                }
+                
+                if(in_array(T_CLASS, $value)) {
+                    $class = $namespace . "\\" . $tokens[$key + 2][1];
+                    array_push($classes, $class);
+                }
+            }
+        }
+        
+        return $classes;
+    }
+    
+    private function getClassAnnotation($class, $annotation) {
+        $reflection = new \ReflectionClass($class);
+        $annotationReader = new AnnotationReader();
+        $annotation = $annotationReader->getClassAnnotation($reflection, str_replace('@', '\\', $this->pattern));
+        
+        return $annotation;
+    }
+    
+    private function notifyAll($annotation, $class) {
+        $event = new AnnotatedClassFoundEvent($class, array($annotation));
+        $this->dispatcher->dispatch("finds_{$this->pattern}", $event);
+    }
+    
     public function find($pattern = "*"): Finder
     {
         $this->pattern = $pattern;
         return $this;
     }
-
+    
     public function in($path = __DIR__): array
     {
         $classes = array();
@@ -35,36 +85,20 @@ final class AnnotatedClassFinder implements Finder
         $finder->files('/.php$/')->in($path);
         
         foreach ($finder as $file) {
-            $code = file_get_contents($file);
-            $tokens = token_get_all($code);
-            $namespace = "";
-            $class = "";
-            
-            foreach ($tokens as $key => $token) {
-                if (is_array($token)) {
-                    if (in_array(T_NAMESPACE, $token)) {
-                        $namespace = $tokens[$key + 2][1];
-                    }
+            if($this->hasClass($file)) {
+                $classes = $this->getDeclaredClasses($file);
+                
+                foreach($classes as $class) {
+                    $annotation = $this->getClassAnnotation($class, $this->pattern);
                     
-                    if (in_array(T_CLASS, $token)) {
-                        $class = $tokens[$key + 2][1];
-                        $fqn = $namespace . '\\' . $class;
-                        
-                        if (class_exists($fqn)) {
-                            $reflection = new \ReflectionClass($fqn);
-                            $annotationReader = new AnnotationReader();
-                            
-                            if (($annotation = $annotationReader->getClassAnnotation($reflection, str_replace('@', '\\', $this->pattern))) != null) {
-                                $event = new AnnotatedClassFoundEvent($fqn, array($annotation));
-                                $this->dispatcher->dispatch("finds_{$this->pattern}", $event);
-                                array_push($classes, $fqn);
-                            }
-                        }
+                    if ($annotation != null) {
+                        $this->notifyAll($annotation, $class);
+                        array_push($classes, $class);
                     }
                 }
             }
         }
-        
+                
         return $classes;
     }
 
