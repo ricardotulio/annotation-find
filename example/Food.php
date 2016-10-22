@@ -1,0 +1,7 @@
+<?php
+
+/**
+ * @Annotation 
+ */
+class Food {
+}

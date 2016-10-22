@@ -1,0 +1,7 @@
+<?php
+
+/**
+ * @Food
+ */
+class Sunday {
+}
